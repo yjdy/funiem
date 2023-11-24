@@ -35,6 +35,11 @@ class PoolingStrategy(str, Enum):
     embedding_last_mean = 'embedding_last_mean'
     last_weighted = 'last_weighted'
 
+class DataType(str, Enum):
+    pair_inbatch_neg = 'pair_inbatch_neg'
+    griplet_inbatch_neg = 'griplet_inbatch_neg'
+    scored_pair = 'scored_pair'
+
 class InBatchNegLossType(str, Enum):
     sigmoid = 'sigmoid'
     softmax = 'softmax'
@@ -49,6 +54,7 @@ def mean_pooling(hidden_state: torch.Tensor, attention_mask: torch.Tensor | None
 
 
 StrategyEmbedderClsMap: dict[PoolingStrategy, Type['UniemEmbedder']] = {}
+DataType2TrainerMap: dict[DataType, Type['EmbedderForTrain']] = {}
 
 
 class Embedder(Protocol):
@@ -176,6 +182,14 @@ def create_uniem_embedder(
     embedder = embedder_cls(pretrained_model)
     return embedder
 
+def create_uniem_embedder_trainer(
+    embedder: torch.nn.Module,
+    data_type: DataType | str = DataType.scored_pair, 
+    temperature: float = 0.05
+):
+    headnet = DataType2GrainerMap(DataType(data_type))
+    model = headnet(embedder=embedder, temperature=temperature)
+    return model
 
 class EmbedderForTrain(torch.nn.Module):
     embedder: Embedder
@@ -188,9 +202,14 @@ class EmbedderForTrain(torch.nn.Module):
         super().__init__()
         self.embedder = embedder
         self.criterion = criterion
+        
+    def __init_subclass__(cls) -> None:
+        DataType2TrainerMap[cls.data_type] = cls
 
 
 class EmbedderForPairInBatchNegTrain(EmbedderForTrain):
+    data_type: ClassVar[DataType] = DataType.pair_inbatch_neg
+    
     def __init__(
         self,
         embedder: Embedder,
@@ -198,12 +217,11 @@ class EmbedderForPairInBatchNegTrain(EmbedderForTrain):
         loss_type: InBatchNegLossType | str = InBatchNegLossType.softmax,
     ):
         self.loss_type = InBatchNegLossType(loss_type)
-        match self.loss_type:
-            case InBatchNegLossType.sigmoid:
+        if self.loss_type == InBatchNegLossType.sigmoid:
                 criterion = PairInBatchNegSigmoidContrastLoss(temperature)
-            case InBatchNegLossType.softmax:
+        if self.loss_type == InBatchNegLossType.softmax:
                 criterion = PairInBatchNegSoftmaxContrastLoss(temperature)
-            case InBatchNegLossType.cosent:
+        if self.loss_type == InBatchNegLossType.cosent:
                 criterion = PairInBatchNegCoSentLoss(temperature)
         super().__init__(embedder, criterion)
 
@@ -215,6 +233,8 @@ class EmbedderForPairInBatchNegTrain(EmbedderForTrain):
 
 
 class EmbedderForTripletInBatchNegTrain(EmbedderForTrain):
+    data_type: ClassVar[DataType] = DataType.triplet_inbatch_neg
+    
     def __init__(
         self,
         embedder: Embedder,
@@ -223,13 +243,12 @@ class EmbedderForTripletInBatchNegTrain(EmbedderForTrain):
         add_swap_loss: bool = False,
     ):
         self.loss_type = InBatchNegLossType(loss_type)
-        match self.loss_type:
-            case InBatchNegLossType.sigmoid:
-                criterion = TripletInBatchNegSigmoidContrastLoss(temperature, add_swap_loss)
-            case InBatchNegLossType.softmax:
-                criterion = TripletInBatchNegSoftmaxContrastLoss(temperature, add_swap_loss)
-            case InBatchNegLossType.cosent:
-                criterion = TripletInBatchNegCoSentLoss(temperature, add_swap_loss)
+        if self.loss_type == InBatchNegLossType.sigmoid:
+            criterion = TripletInBatchNegSigmoidContrastLoss(temperature, add_swap_loss)
+        if self.loss_type == InBatchNegLossType.softmax:
+            criterion = TripletInBatchNegSoftmaxContrastLoss(temperature, add_swap_loss)
+        if self.loss_type == InBatchNegLossType.cosent:
+            criterion = TripletInBatchNegCoSentLoss(temperature, add_swap_loss)
         super().__init__(embedder, criterion)
 
     def forward(
@@ -246,11 +265,15 @@ class EmbedderForTripletInBatchNegTrain(EmbedderForTrain):
 
 
 class EmbedderForScoredPairTrain(EmbedderForTrain):
+    data_type: ClassVar[DataType] = DataType.scored_pair
+    
     def __init__(
         self,
         embedder: Embedder,
         temperature: float = 0.05,
+        loss_type = InBatchNegLossType | str = InBatchNegLossType.cosent
     ):
+        self.loss_type = loss_type
         super().__init__(embedder, CoSentLoss(temperature))
 
     def forward(
@@ -263,7 +286,7 @@ class EmbedderForScoredPairTrain(EmbedderForTrain):
         text_pos_embeddings = self.embedder(text_pair_ids)
         predict_labels = torch.cosine_similarity(text_embeddings, text_pos_embeddings, dim=-1)
         loss = self.criterion(predict_labels, labels)
-        return {'loss': loss, 'predict_labels': predict_labels}
+        return {'loss': loss, 'predict_labels': predict_labels,"labels":labels}
 
 
 class Uniem:
