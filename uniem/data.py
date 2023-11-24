@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 from collections import defaultdict
 from dataclasses import dataclass
@@ -136,8 +138,10 @@ class FinetuneDataset(Dataset):
         self,
         dataset: HfDataset | Sequence[dict],
         record_type: RecordType | str | None = None,
+        query_instruction: str =''
     ) -> None:
         self.dataset = dataset
+        self.query_instruction = query_instruction
         if record_type:
             self.record_type = RecordType(record_type)
         else:
@@ -146,6 +150,11 @@ class FinetuneDataset(Dataset):
 
     def __getitem__(self, index: int):
         record = self.dataset[index]
+        if self.query_instruction:
+            if 'text' in records:
+                record['text'] = self.query_instruction+record['text']
+            elif 'sentence1' in record: # 兼容scored_pair数据
+                 record['sentence1'] = self.query_instruction+record['sentence1']
         return self.record_cls(**record)
 
     def __len__(self):
@@ -157,6 +166,7 @@ class FinetuneIterableDataset(IterableDataset):
         self,
         dataset: HfIterableDataset | Iterable[dict],
         record_type: RecordType | str | None = None,
+        query_instruction: str =''
     ) -> None:
         self.dataset = dataset
         if record_type:
@@ -167,6 +177,10 @@ class FinetuneIterableDataset(IterableDataset):
 
     def __iter__(self):
         for record in self.dataset:
+            if 'text' in records:
+                record['text'] = self.query_instruction+record['text']
+            elif 'sentence1' in record: # 兼容scored_pair数据
+                 record['sentence1'] = self.query_instruction+record['sentence1']
             yield self.record_cls(**record)
 
 
@@ -182,13 +196,12 @@ class PrefixFinetuneDataset(FinetuneDataset):
 
     def __getitem__(self, index: int):
         record = self.dataset[index]
-        match self.record_type:
-            case RecordType.PAIR:
-                record['text'] = self.prefix + record['text']
-            case RecordType.TRIPLET:
-                record['text'] = self.prefix + record['text']
-            case RecordType.SCORED_PAIR:
-                record['sentence1'] = self.prefix + record['sentence1']
+        if self.record_type == RecordType.PAIR:
+            record['text'] = self.prefix + record['text']
+        if self.record_type == RecordType.TRIPLET:
+            record['text'] = self.prefix + record['text']
+        if self.record_type == RecordType.SCORED_PAIR:
+            record['sentence1'] = self.prefix + record['sentence1']
         return self.record_cls(**record)
 
 
@@ -204,13 +217,12 @@ class PrefixFinetuneIterableDataset(FinetuneIterableDataset):
 
     def __iter__(self):
         for record in self.dataset:
-            match self.record_type:
-                case RecordType.PAIR:
-                    record['text'] = self.prefix + record['text']
-                case RecordType.TRIPLET:
-                    record['text'] = self.prefix + record['text']
-                case RecordType.SCORED_PAIR:
-                    record['sentence1'] = self.prefix + record['sentence1']
+            if self.record_type == RecordType.PAIR:
+                record['text'] = self.prefix + record['text']
+            if self.record_type == RecordType.TRIPLET:
+                record['text'] = self.prefix + record['text']
+            if self.record_type == RecordType.SCORED_PAIR:
+                record['sentence1'] = self.prefix + record['sentence1']
             yield self.record_cls(**record)
 
 
