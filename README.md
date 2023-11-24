@@ -41,7 +41,7 @@ embeddings = model.encode(['Hello World!', '你好,世界!'])
 ```python
 from datasets import load_dataset
 
-from uniem.finetuner import FineTuner
+from funiem.finetuner import FineTuner
 
 dataset = load_dataset('shibing624/nli_zh', 'STS-B')
 # 指定训练的模型为 m3e-small
