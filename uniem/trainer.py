@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import logging
 import os
-import re
-import shutil
+import gc
 from typing import Any, Callable, Sequence, Sized
 
 import torch
@@ -34,6 +32,8 @@ class Trainer:
         log_interval: int = 50,
         save_on_epoch_end: bool = True,
         epoch_end_callbacks: Sequence[Callable[['Trainer'], None]] | None = None,
+        metric = None,
+        early_stopping_patience: int = 3
     ):
         self.model = model
         self.optimizer = optimizer
@@ -45,6 +45,11 @@ class Trainer:
         self.log_interval = log_interval
         self.save_on_epoch_end = save_on_epoch_end
 
+        self.metric = metric
+        self.best_result = -1
+        self.early_stopping_patience = early_stopping_patience
+        self.current_patience = early_stopping_patience
+
         self.train_loss_tracker = LossTracker()
         self.validation_loss_tracker = LossTracker()
         if isinstance(self.train_dataloader.dataset, Sized):
@@ -55,7 +60,19 @@ class Trainer:
         self.epoch_end_callbacks = epoch_end_callbacks or []
         self.current_step = 0
 
-    def train(self):
+    def train(self, test_first=True):
+        if test_first and self.validation_dataloader:
+            validation_loss, validation_result = evaluate(
+                self.model,
+                self.validation_dataloader,
+                accelerator=self.accelerator,
+                loss_tracker=self.train_loss_tracker,
+                metric=self.metric
+            )
+            if validation_result:
+                self.accelerator.print(f"Validation loss: {validation_loss}, metric_result: {validation_result: .6f}")
+                self.best_result = validation_result
+            
         for current_epoch in range(1, self.epochs + 1):
             self.model.train()
             self.progress_bar.on_epoch_start()
@@ -67,7 +84,7 @@ class Trainer:
                     loss = batch_output['loss']
                     self.accelerator.backward(loss)
                     self.optimizer.step()
-                    if self.lr_scheduler is not None:
+                    if self.lr_scheduler is not None and not self.accelerator.optimizer_step_was_skipped:
                         self.lr_scheduler.step()
                     self.train_loss_tracker.update(loss)
 
@@ -78,6 +95,8 @@ class Trainer:
                         {'loss': self.train_loss_tracker.loss},
                         step=self.current_step,
                     )
+            gc.collect()
+            torch.cuda.empty_cache()
 
             train_metrics = self.add_prefix({'loss': self.train_loss_tracker.loss}, 'train')
             self.accelerator.log(train_metrics, step=current_epoch)
@@ -85,21 +104,46 @@ class Trainer:
             self.progress_bar.on_epoch_end()
 
             if self.validation_dataloader:
-                validation_loss = evaluate(
+                validation_loss, validation_result = evaluate(
                     self.model,
                     self.validation_dataloader,
-                    self.validation_loss_tracker,
+                    accelerator=self.accelerator,
+                    loss_tracker=self.train_loss_tracker,
+                    metric=self.metric
                 )
+                
+                if validation_result:
+                    validation_metrics = self.add_prefix({'loss': validation_loss,'metric':validation_result}, 'validation')
+                    self.accelerator.print(f"Validation loss: {validation_loss}, metric_result: {validation_result: .6f}")
+                    if self.best_result < validation_result:
+                        self.best_result = validation_result
+                        self.current_patience = self.early_stopping_patience
+                        if self.accelerator.is_main_process:
+                            unwrapped_model = self.accelerator.unwrap_model(self.model)
+                            self.accelerator.save(
+                                "model":unwrapped_model.state_dict(),
+                                "optimizer": self.optimizer.state_dict(),
+                                os.path.join(self.accelerator.project_configuration.project_dir, "checpoint.pt")
+                            )
+                    else:
+                        self.current_patience -= 1
+                        if self.current_patience < 0:
+                            self.accelerator.print("Early Stopping")
+                            self.accelerator.set_trigger()
+                    if self.accelerator.check_trigger():
+                break
+            else:
                 validation_metrics = self.add_prefix({'loss': validation_loss}, 'validation')
                 self.accelerator.print(f'Epoch {current_epoch} Validation loss: {validation_loss:.4f}')
                 self.accelerator.log(validation_metrics, step=current_epoch)
+            
 
-            if self.save_on_epoch_end:
-                self.accelerator.save_state(self.get_checkpoint_dir())
+            # if self.save_on_epoch_end:
+            #     self.accelerator.save_state(self.get_checkpoint_dir())
 
-            if self.epoch_end_callbacks:
-                for callback in self.epoch_end_callbacks:
-                    callback(self)
+            # if self.epoch_end_callbacks:
+            #     for callback in self.epoch_end_callbacks:
+            #         callback(self)
 
         self.accelerator.end_training()
 
@@ -143,17 +187,29 @@ class Trainer:
 def evaluate(
     model: torch.nn.Module,
     dataloader: DataLoader,
+    accelerator = None,
     loss_tracker: LossTracker | None = None,
+    metric = None
 ):
     model = model.eval()
+    if metric:
+        predicts = []
+        labels = []
     loss_tracker = loss_tracker or LossTracker()
     for batch in dataloader:
         with torch.inference_mode():
-            batch_output = model(**batch)
+            batch_output = accelerator.unwrap_model(model)(**batch)
             loss_tracker.update(batch_output['loss'])
+            if metric:
+                predicts.extend(batch_output["predict_labels"].detach().cpu().numpy())
+                labels.extend(batch_output["lables"].detach().cpu().numpy())
+    if metric:
+        metric_result = metric(labels, predicts)
+    else:
+        metric_result = None
     loss = loss_tracker.loss
     loss_tracker.on_epoch_end()
-    return loss
+    return loss, metric_result
 
 
 class DummyProgressBar:
