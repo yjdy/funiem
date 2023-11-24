@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import functools
 import gc
 import importlib
@@ -13,6 +15,8 @@ import torch
 import typer
 import yaml
 from accelerate.utils.memory import should_reduce_batch_size
+from accelerate.utils import DummyOptim
+
 from transformers import AutoModel, PreTrainedModel
 
 T = TypeVar('T')
@@ -56,10 +60,9 @@ def load_config_file(config_file: str | Path, file_type: ConfigFileType | str | 
     else:
         file_type = ConfigFileType(file_type)
 
-    match file_type:
-        case ConfigFileType.yaml:
+    if file_type == ConfigFileType.yaml:
             config = load_from_yaml(config_file)
-        case ConfigFileType.json:
+    if file_type == ConfigFileType.json:
             config = load_from_json(config_file)
     return config
 
@@ -101,19 +104,26 @@ def create_adamw_optimizer(
     lr: float,
     weight_decay: float = 1e-3,
     no_decay_keywords: Sequence[str] = ('bias', 'LayerNorm', 'layernorm'),
+    dummy=False
 ):
     parameters = list(model.named_parameters())
     optimizer_grouped_parameters = [
         {
             'params': [p for n, p in parameters if not any(nd in n for nd in no_decay_keywords)],
             'weight_decay': weight_decay,
+            'lr': lr
         },
         {
             'params': [p for n, p in parameters if any(nd in n for nd in no_decay_keywords)],
             'weight_decay': 0.0,
+            'lr': lr
         },
     ]
-    optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=lr)
+    if not dummy: 
+        optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=lr)
+    else:
+        # 使用deepspeed时需要使用dummy
+        optimizer = DummyOptim(optimizer_grouped_parameters,lr=lr,weight_decay=weight_decay)
     return optimizer
 
 
