@@ -7,6 +7,7 @@
 # TO DO
 - [x] deepspeed训练加速
 - [x] 根据数据格式自动选择训练策略
+- [x] 增加early stopping功能
 - [ ] lora 微调
 - [ ] 增加训练脚本和examples
 
