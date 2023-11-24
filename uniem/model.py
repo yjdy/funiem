@@ -1,6 +1,12 @@
+from __future__ import annotations
+
 from enum import Enum
 from pathlib import Path
-from typing import ClassVar, Literal, Protocol, Type, TypeVar, cast
+from typing import ClassVar, Type, TypeVar, cast
+try:
+    from typing import Literal, Protocol
+except ImportError:
+    from typing_extensions import Literal, Protocol
 
 import numpy as np
 import torch
@@ -28,7 +34,6 @@ class PoolingStrategy(str, Enum):
     first_last_mean = 'first_last_mean'
     embedding_last_mean = 'embedding_last_mean'
     last_weighted = 'last_weighted'
-
 
 class InBatchNegLossType(str, Enum):
     sigmoid = 'sigmoid'
