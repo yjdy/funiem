@@ -4,6 +4,11 @@
 [![ci](https://github.com/wangyuxinwhy/uniem/actions/workflows/ci.yml/badge.svg)](https://github.com/wangyuxinwhy/uniem/actions/workflows/ci.yml)
 [![cd](https://github.com/wangyuxinwhy/uniem/actions/workflows/cd.yml/badge.svg)](https://github.com/wangyuxinwhy/uniem/actions/workflows/cd.yml)
 
+# TO DO
+- [x] deepspeed训练加速
+- [x] 根据数据格式自动选择训练策略
+- [ ] lora 微调 
+
 uniem 项目的目标是创建中文最好的通用文本嵌入模型。
 
 本项目主要包括模型的训练，微调和评测代码，模型与数据集会在 [HuggingFace](https://huggingface.co/) 社区上进行开源。
