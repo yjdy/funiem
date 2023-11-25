@@ -14,6 +14,10 @@ class TrainingStrategy:
     def apply_model(self, model: T) -> T:
         raise NotImplementedError
 
+# TO DO 实现lora微调
+class LoRATraining(TrainingStrategy):
+    def apply_model(self, model: T) -> T:
+        raise NotImplementedError
 
 class FullParametersTraining(TrainingStrategy):
     def apply_model(self, model: T) -> T:
