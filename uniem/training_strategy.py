@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import functools
 from typing import Sequence, TypeVar, cast
 
@@ -15,7 +17,7 @@ class TrainingStrategy:
         raise NotImplementedError
 
 # TO DO 实现lora微调
-class LoRATraining(TrainingStrategy):
+class LoraTraining(TrainingStrategy):
     def apply_model(self, model: T) -> T:
         raise NotImplementedError
 

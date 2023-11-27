@@ -209,8 +209,7 @@ class FineTuner:
             model = EmbedderForTripletInBatchNegTrain(
                 embedder=self.embedder,
                 temperature=temperature,
-                loss_type=InBatchNegLossType.softmax,
-            )
+                loss_type=InBatchNegLossType.softmax)
        if self.record_type == RecordType.SCORED_PAIR:
             model = EmbedderForScoredPairTrain(
                 embedder=self.embedder,
