@@ -6,7 +6,7 @@ import os, sys
 sys.path.append(os.getcwd())
 
 from pathlib import Path
-from typing import Annotated, Optional, Iterable, Sequence, Sized, cast, Union
+from typing import Annotated, Optional, Iterable, Sequence, Sized, cast, Union, Callable
 
 import typer
 from accelerate import Accelerator
@@ -158,7 +158,7 @@ def main(
     seed: Annotated[int, typer.Option(rich_help_panel='Trainer')] = 42,
     output_dir: Annotated[Optional[Path], typer.Option(rich_help_panel='Trainer')] = None,
     logging_dir: Annotated[Optional[Path], typer.Option(rich_help_panel='Trainer')] = None,
-    metric = None,
+    metric: Sequence[Callable[[Trainer], None]] | None = None,
     # Config
     config_file: ConfigFile = None,
 ):
