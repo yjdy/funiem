@@ -18,7 +18,8 @@ from torch.utils.data import DataLoader
 import typer
 import yaml
 from accelerate.utils.memory import should_reduce_batch_size
-from accelerate.utils import DummyOptim
+from accelerate.utils import DummyOptim, DummyScheduler
+
 
 from transformers import AutoModel, PreTrainedModel
 from datasets import load_dataset, DatasetDict

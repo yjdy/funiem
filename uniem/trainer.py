@@ -119,8 +119,8 @@ class Trainer:
                         if self.accelerator.is_main_process:
                             unwrapped_model = self.accelerator.unwrap_model(self.model)
                             self.accelerator.save(
-                                "model":unwrapped_model.state_dict(),
-                                "optimizer": self.optimizer.state_dict(),
+                                {"model":unwrapped_model.state_dict(),
+                                "optimizer": self.optimizer.state_dict()},
                                 os.path.join(self.accelerator.project_configuration.project_dir, "checpoint.pt")
                             )
                     else:
@@ -129,7 +129,7 @@ class Trainer:
                             self.accelerator.print("Early Stopping")
                             self.accelerator.set_trigger()
                     if self.accelerator.check_trigger():
-                break
+                        break
             else:
                 validation_metrics = self.add_prefix({'loss': validation_loss}, 'validation')
                 self.accelerator.print(f'Epoch {current_epoch} Validation loss: {validation_loss:.4f}')
@@ -152,34 +152,6 @@ class Trainer:
     @staticmethod
     def add_prefix(values: dict[str, Any], prefix: str):
         return {f'{prefix}/{k}': v for k, v in values.items()}
-
-    def get_checkpoint_dir(self):
-        # COPY FROM accelerator to fix Checkpoint bug
-        self.accelerator.project_configuration.automatic_checkpoint_naming = False
-        output_dir = os.path.join(self.accelerator.project_dir, 'checkpoints')
-        if self.accelerator.is_local_main_process:
-            os.makedirs(output_dir, exist_ok=True)
-            folders = [os.path.join(output_dir, folder) for folder in os.listdir(output_dir)]
-            if self.accelerator.project_configuration.total_limit is not None and (
-                len(folders) + 1 > self.accelerator.project_configuration.total_limit
-            ):
-
-                def _inner(folder):
-                    return list(map(int, re.findall(r'[\/]?([0-9]+)(?=[^\/]*$)', folder)))[0]
-
-                folders.sort(key=_inner)
-                logger.warning(
-                    f'Deleting {len(folders) + 1 - self.accelerator.project_configuration.total_limit}'
-                    'checkpoints to make room for new checkpoint.'
-                )
-                for folder in folders[: len(folders) + 1 - self.accelerator.project_configuration.total_limit]:
-                    shutil.rmtree(folder)
-
-        output_dir = os.path.join(output_dir, f'checkpoint_{self.accelerator.save_iteration}')
-        if self.accelerator.is_local_main_process:
-            os.makedirs(output_dir, exist_ok=True)
-        logger.info(f'Saving current state to {output_dir}')
-        return output_dir
 
 
 def evaluate(

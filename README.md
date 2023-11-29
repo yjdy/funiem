@@ -7,23 +7,32 @@
 本项目是在[uniem](https://github.com/wangyuxinwhy/uniem)基础上的二次开发，优化了以下工作。极大的提升了训练和推理效率。
 # TO DO
 - [x] deepspeed训练加速
-- [ ] deepspeed推理加速
+- [x] transformers pipeline加速推理
 - [x] 根据数据格式自动选择训练策略
 - [x] 增加early stopping功能
 - [ ] lora 微调
-- [ ] 增加训练脚本和examples
+- [x] 增加训练脚本和examples
 - [ ] 实现双塔共享与不共享的自动配置
 
 uniem 项目的目标是创建中文最好的通用文本嵌入模型。
 
 本项目主要包括模型的训练，微调和评测代码，模型与数据集会在 [HuggingFace](https://huggingface.co/) 社区上进行开源。
 
-## 🌟 重要更新
+## 效率对比
+以下实验全是在单张V100 32G显卡中测试得到。**训练速度提升一倍，显存节省24.5%**
 
-- ➿ **2023.07.11** , 发布 uniem 0.3.0， `FineTuner` 除 M3E 外，还支持 `sentence_transformers`, `text2vec` 等模型的微调，同时还支持 [SGPT](https://github.com/Muennighoff/sgpt) 的方式对 GPT 系列模型进行训练，以及 Prefix Tuning。 **FineTuner 初始化的 API 有小小的变化，无法兼容 0.2.0**
-- ➿ **2023.06.17** , 发布 uniem 0.2.1 ， 实现了 `FineTuner` 以原生支持模型微调，**几行代码，即刻适配**！
-- 📊 **2023.06.17** , 发布 [MTEB-zh](https://github.com/wangyuxinwhy/uniem/tree/main/mteb-zh) 正式版 ， 支持 6 大类 Embedding 模型 ，支持 4 大类任务 ，共 9 种数据集的自动化评测
-- 🎉 **2023.06.08** , 发布 [M3E models](https://huggingface.co/moka-ai/m3e-base) ，在中文文本分类和文本检索上均优于 `openai text-embedding-ada-002`，详请请参考 [M3E models README](https://huggingface.co/moka-ai/m3e-base/blob/main/README.md)。
+### 训练效率对比
+| 训练框架   | 1epoch 训练时间 | 显存  |
+|--------|-------------|-----|
+| uniem  | 61min       | 31G |
+| funiem | 29min       | 20G |
+
+### 推理效率对比
+推理速度相较于sentence-transformers原生推理**提高了7倍**
+| 框架                    | 推理时间  |
+|-----------------------|-------|
+| sentence-transformers | 22min |
+| funiem                | 3min  |
 
 ## 🔧 使用 M3E
 
@@ -51,29 +60,13 @@ embeddings = model.encode(['Hello World!', '你好,世界!'])
 ```python
 from datasets import load_dataset
 
-from funiem.finetuner import FineTuner
+from uniem.finetuner import FineTuner
 
 dataset = load_dataset('shibing624/nli_zh', 'STS-B')
 # 指定训练的模型为 m3e-small
 finetuner = FineTuner.from_pretrained('moka-ai/m3e-small', dataset=dataset)
 finetuner.run(epochs=3)
 ```
-
-微调模型详见 [uniem 微调教程](https://github.com/wangyuxinwhy/uniem/blob/main/examples/finetune.ipynb) or <a target="_blank" href="https://colab.research.google.com/github/wangyuxinwhy/uniem/blob/main/examples/finetune.ipynb">
-  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
-</a>
-
-
-如果您想要在本地运行，您需要运行如下命令，准备环境
-
-```bash
-conda create -n uniem python=3.10
-pip install uniem
-```
-
-## 💯 MTEB-zh
-
-中文 Embedding 模型缺少统一的评测标准，所以我们参考了 [MTEB](https://huggingface.co/spaces/mteb/leaderboard) ，构建了中文评测标准 MTEB-zh，目前已经对 6 种模型在各种数据集上进行了横评，详细的评测方式和代码请参考 [MTEB-zh](https://github.com/wangyuxinwhy/uniem/tree/main/mteb-zh) 。
 
 
 ### 文本分类
@@ -104,20 +97,3 @@ pip install uniem
 | mrr@10  | 0.6217   | 0.7668         | 0.712     | **0.7841**   | 0.7827 | 0.36287   | 0.14516 | 0.3751     |
 | ndcg@1  | 0.5207   | 0.6764         | 0.6159    | 0.6881   | **0.6884** | 0.28358   | 0.09748 | 0.28578    |
 | ndcg@10 | 0.6346   | 0.7786         | 0.7262    | **0.8004**   | 0.7974 | 0.37468   | 0.15783 | 0.39329    |
-
-## 🤝 Contributing
-
-如果您想要在 MTEB-zh 中添加评测数据集或者模型，欢迎提 issue 或者 PR，我会在第一时间进行支持，期待您的贡献！
-
-## 📜 License
-
-uniem is licensed under the Apache-2.0 License. See the LICENSE file for more details.
-
-## 🏷 Citation
-
-Please cite this model using the following format:
-
-@software {Moka Massive Mixed Embedding,
-author = {Wang Yuxin,Sun Qingxuan,He sicheng},
-title = {M3E: Moka Massive Mixed Embedding Model},
-year = {2023} }

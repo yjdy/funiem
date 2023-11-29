@@ -9,6 +9,7 @@ from typing import Any, Callable, Iterable, Sequence, Sized, cast, Union
 import torch
 from accelerate import Accelerator
 from accelerate.tracking import GeneralTracker
+from accelerate.utils import DummyScheduler # 为deepspeed准备
 from accelerate.utils import LoggerType, ProjectConfiguration, set_seed
 from datasets import Dataset as HFDataset
 from datasets import IterableDataset as HFIterableDataset
@@ -206,11 +207,10 @@ class FineTuner:
                 loss_type=InBatchNegLossType.softmax,
             )
         if self.record_type == RecordType.TRIPLET:
-            model = EmbedderForTripletInBatchNegTrain(
-                embedder=self.embedder,
-                temperature=temperature,
-                loss_type=InBatchNegLossType.softmax)
-       if self.record_type == RecordType.SCORED_PAIR:
+            model = EmbedderForTripletInBatchNegTrain(embedder=self.embedder,
+                                                      temperature=temperature,
+                                                      loss_type=InBatchNegLossType.softmax)
+        if self.record_type == RecordType.SCORED_PAIR:
             model = EmbedderForScoredPairTrain(
                 embedder=self.embedder,
                 temperature=temperature,
@@ -301,7 +301,13 @@ class FineTuner:
         # Optimizer & LRScheduler
         lr = lr or suggest_lr(self.embedder)  # type: ignore
         accelerator.print(f'Learning rate: {lr}')
-        optimizer = create_adamw_optimizer(model, lr=lr, weight_decay=weight_decay)
+        if (
+                accelerator.state.deepspeed_plugin is None
+                or "optimizer" not in accelerator.state.deepspeed_plugin.deepspeed_config
+        ):
+            optimizer = create_adamw_optimizer(model, lr=lr, weight_decay=weight_decay)
+        else:
+            optimizer = create_adamw_optimizer(model, lr=lr, weight_decay=weight_decay, dummy=True)
 
         if num_warmup_steps is None:
             lr_scheduler = None
@@ -312,11 +318,18 @@ class FineTuner:
                 total_steps = len(train_dataloader) * epochs
                 if num_warmup_steps < 1:
                     num_warmup_steps = int(num_warmup_steps * total_steps)
-                lr_scheduler = get_cosine_schedule_with_warmup(
-                    optimizer=optimizer,
-                    num_warmup_steps=int(num_warmup_steps),
-                    num_training_steps=total_steps,
-                )
+                if (
+                        accelerator.state.deepspeed_plugin is None
+                        or "optimizer" not in accelerator.state.deepspeed_plugin.deepspeed_config
+                ):
+                    lr_scheduler = get_cosine_schedule_with_warmup(
+                        optimizer=optimizer,
+                        num_warmup_steps=int(num_warmup_steps),
+                        num_training_steps=total_steps,
+                    )
+                else:
+                    lr_scheduler = DummyScheduler(optimizer, num_warmup_steps=int(num_warmup_steps),
+                                                  total_num_steps=total_steps)
         optimizer, lr_scheduler = accelerator.prepare(optimizer, lr_scheduler)
 
         # Trainer
@@ -328,14 +341,12 @@ class FineTuner:
             accelerator=accelerator,
             epochs=epochs,
             lr_scheduler=lr_scheduler,
-            log_interval=10,
-            save_on_epoch_end=save_on_epoch_end,
-            epoch_end_callbacks=epoch_end_callbacks,
+            log_interval=10
         )
         accelerator.print(f'Start training for {epochs} epochs')
         trainer.train()
 
-        accelerator.wait_for_everyone()
+        # accelerator.wait_for_everyone()
         accelerator.print('Training finished')
 
         if self.model_type is not ModelType.custom:
