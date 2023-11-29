@@ -3,7 +3,8 @@
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/uniem)
 [![ci](https://github.com/wangyuxinwhy/uniem/actions/workflows/ci.yml/badge.svg)](https://github.com/wangyuxinwhy/uniem/actions/workflows/ci.yml)
 [![cd](https://github.com/wangyuxinwhy/uniem/actions/workflows/cd.yml/badge.svg)](https://github.com/wangyuxinwhy/uniem/actions/workflows/cd.yml)
-本项目是在uniem()基础上的二次开发，优化了以下工作。极大的提升了训练和推理效率。
+
+本项目是在[uniem](https://github.com/wangyuxinwhy/uniem)基础上的二次开发，优化了以下工作。极大的提升了训练和推理效率。
 # TO DO
 - [x] deepspeed训练加速
 - [ ] deepspeed推理加速
