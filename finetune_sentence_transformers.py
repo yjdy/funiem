@@ -158,7 +158,7 @@ def main(
     seed: Annotated[int, typer.Option(rich_help_panel='Trainer')] = 42,
     output_dir: Annotated[Optional[Path], typer.Option(rich_help_panel='Trainer')] = None,
     logging_dir: Annotated[Optional[Path], typer.Option(rich_help_panel='Trainer')] = None,
-    metric: Sequence[Callable[[Trainer], None]] | None = None,
+    metric: Callable[[list, list], float] | None = None,
     # Config
     config_file: ConfigFile = None,
 ):
@@ -190,7 +190,7 @@ def main(
         split_batches=True,
         kwargs_handlers = [ddp_kwargs]
     )
-    accelerator.init_trackers("model")
+    accelerator.init_trackers(os.path.basename(model_name_or_path))
     accelerator.print(f'Parameters: {locals()}')
 
     set_seed(seed)
