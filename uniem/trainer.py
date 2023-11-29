@@ -15,8 +15,6 @@ try:
 except ImportError:
     from torch.optim.lr_scheduler import _LRScheduler as LRScheduler
 
-logger = logging.getLogger(__name__)
-
 
 class Trainer:
     def __init__(

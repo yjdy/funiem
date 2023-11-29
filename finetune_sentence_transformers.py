@@ -6,7 +6,7 @@ import os, sys
 sys.path.append(os.getcwd())
 
 from pathlib import Path
-from typing import Annotated, Optional, Iterable, Sequence, Sized, cast, Union, Callable
+from typing import Annotated, Optional, Union, Callable
 
 import typer
 from accelerate import Accelerator
@@ -16,13 +16,8 @@ from accelerate.utils import DummyScheduler # 为deepspeed准备
 
 
 from transformers import AutoTokenizer, get_cosine_schedule_with_warmup
-from datasets import load_dataset, DatasetDict
-from datasets import Dataset as HFDataset
-from datasets import IterableDataset as HFIterableDataset
-from datasets import concatenate_datasets, load_from_disk
 
 
-from uniem.data import M3EDataset, M3EHfDatsetWithInfo, PairCollator
 from uniem.model import (
     DataType,
     PoolingStrategy,
@@ -30,102 +25,14 @@ from uniem.model import (
     create_uniem_embedder_trainer
 )
 from uniem.trainer import Trainer
-from uniem.data import FinetuneDataset, FinetuneIterableDataset
-from uniem.data import ScoredPairCollator, TripletCollator, PairCollator
 from uniem.training_strategy import BitFitTrainging
 from uniem.types import MixedPrecisionType
 from uniem.utils import ConfigFile, convert_number_to_readable_string, create_adamw_optimizer
+from uniem.utils import create_dataloaders, create_finetune_datasets, load_all_datasets_json
 from uniem.data_structures import RecordType
 
 import torch
-from torch.utils.data import DataLoader
 import torch.nn as nn
-
-MapStyleDataset = Union[Sequence[dict], HFDataset]
-IterableStyleDataset = Union[Iterable[dict], HFIterableDataset]
-SupportedDataset = Union[MapStyleDataset, IterableStyleDataset]
-SupportedDatasetDict = dict[str, SupportedDataset]
-
-
-def create_finetune_datasets(raw_train_dataset, raw_validation_dataset,record_type,query_instruction='')\
-        -> tuple[FinetuneDataset | FinetuneIterableDataset, FinetuneDataset | FinetuneIterableDataset | None]:
-    if not isinstance(raw_train_dataset, Sized):
-        raw_train_dataset = cast(IterableStyleDataset, raw_train_dataset)
-        train_dataset = FinetuneIterableDataset(raw_train_dataset, record_type=record_type, query_instruction=query_instruction)
-    else:
-        train_dataset = FinetuneDataset(raw_train_dataset, record_type=record_type, query_instruction=query_instruction)
-
-    if raw_validation_dataset is None:
-        validation_dataset = None
-    elif not isinstance(raw_validation_dataset, Sized):
-        raw_validation_dataset = cast(IterableStyleDataset, raw_validation_dataset)
-        validation_dataset = FinetuneIterableDataset(raw_validation_dataset, record_type=record_type, query_instruction=query_instruction)
-    else:
-        validation_dataset = FinetuneDataset(raw_validation_dataset, record_type=record_type, query_instruction=query_instruction)
-
-    return train_dataset, validation_dataset
-
-
-def create_dataloaders(
-        train_dataset: FinetuneDataset | FinetuneIterableDataset,
-        validation_dataset: FinetuneDataset | FinetuneIterableDataset | None,
-        tokenizer,
-        record_type,
-        batch_size: int = 64,
-        num_workers: int = 0,
-        drop_last: bool = False,
-        shuffle: bool = False,
-        max_length: int | None = None,
-) -> tuple[DataLoader, DataLoader | None]:
-    if record_type == RecordType.PAIR:
-        data_collator = PairCollator(tokenizer=tokenizer, max_length=max_length)
-    if record_type == RecordType.TRIPLET:
-        data_collator = TripletCollator(tokenizer=tokenizer, max_length=max_length)
-    if record_type == RecordType.SCORED_PAIR:
-        data_collator = ScoredPairCollator(tokenizer=tokenizer, max_length=max_length)
-
-    train_dataloader = DataLoader(
-        train_dataset,
-        batch_size=batch_size,
-        collate_fn=data_collator,
-        shuffle=shuffle,
-        num_workers=num_workers,
-        pin_memory=True,
-        drop_last=drop_last,
-    )
-
-    if validation_dataset is not None:
-        validation_dataloader = DataLoader(
-            validation_dataset,
-            batch_size=batch_size,
-            collate_fn=data_collator,
-            shuffle=False,
-            num_workers=num_workers,
-            pin_memory=True,
-            drop_last=False,
-        )
-    else:
-        validation_dataloader = None
-    return train_dataloader, validation_dataloader
-
-def load_all_datasets_json(datasets_dir: Union[str, Path], need_validation=True, validation_name="validation.json") -> list[M3EHfDatsetWithInfo]:
-    data_files = []
-    validation_file = ''
-    for file_name in os.listdir(datasets_dir):
-        if need_validation and validation_name==file_name:
-            validation_file = os.path.join(datasets_dir, file_name)
-        elif file_name.endswith("json"):
-            data_files.append(os.path.join(datasets_dir, file_name))
-
-    total_datasets = load_dataset("json", data_files=data_files)["train"]
-    if need_validation and not validation_file:
-        total_datasets = total_datasets.train_test_split(test_size=0.1,seed=42,shuffle=True)
-        total_datasets["validation"] = total_datasets.pop("test")
-    elif validation_file:
-        total_datasets = DatasetDict(
-            {"train":total_datasets,"validation":load_dataset("json", data_files=validation_file)["train"]}
-        )
-    return total_datasets
 
 def main(
     model_name_or_path: Union[str],

@@ -3,6 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from pathlib import Path
 from typing import ClassVar, Type, TypeVar, cast
+
 try:
     from typing import Literal, Protocol
 except ImportError:
@@ -35,10 +36,12 @@ class PoolingStrategy(str, Enum):
     embedding_last_mean = 'embedding_last_mean'
     last_weighted = 'last_weighted'
 
+
 class DataType(str, Enum):
     pair_inbatch_neg = 'pair_inbatch_neg'
     griplet_inbatch_neg = 'griplet_inbatch_neg'
     scored_pair = 'scored_pair'
+
 
 class InBatchNegLossType(str, Enum):
     sigmoid = 'sigmoid'
@@ -50,7 +53,8 @@ def mean_pooling(hidden_state: torch.Tensor, attention_mask: torch.Tensor | None
     if attention_mask is None:
         return torch.mean(hidden_state, dim=1)
     attention_mask = attention_mask.float()
-    return torch.sum(hidden_state * attention_mask.unsqueeze(-1), dim=1) / torch.sum(attention_mask, dim=-1, keepdim=True)
+    return torch.sum(hidden_state * attention_mask.unsqueeze(-1), dim=1) / torch.sum(attention_mask, dim=-1,
+                                                                                     keepdim=True)
 
 
 StrategyEmbedderClsMap: dict[PoolingStrategy, Type['UniemEmbedder']] = {}
@@ -173,56 +177,58 @@ class LastWeightedEmbedder(UniemEmbedder):
 
 
 def create_uniem_embedder(
-    model_name_or_path: str,
-    model_class: str | None = None,
-    pooling_strategy: PoolingStrategy | str = PoolingStrategy.last_mean,
+        model_name_or_path: str,
+        model_class: str | None = None,
+        pooling_strategy: PoolingStrategy | str = PoolingStrategy.last_mean,
 ):
     pretrained_model = load_hf_pretrained_model(model_name_or_path, model_class=model_class)
     embedder_cls = StrategyEmbedderClsMap[PoolingStrategy(pooling_strategy)]
     embedder = embedder_cls(pretrained_model)
     return embedder
 
+
 def create_uniem_embedder_trainer(
-    embedder: torch.nn.Module,
-    data_type: DataType | str = DataType.scored_pair, 
-    temperature: float = 0.05
+        embedder: torch.nn.Module,
+        data_type: DataType | str = DataType.scored_pair,
+        temperature: float = 0.05
 ):
-    headnet = DataType2GrainerMap(DataType(data_type))
+    headnet = DataType2TrainerMap(DataType(data_type))
     model = headnet(embedder=embedder, temperature=temperature)
     return model
+
 
 class EmbedderForTrain(torch.nn.Module):
     embedder: Embedder
 
     def __init__(
-        self,
-        embedder: Embedder,
-        criterion: torch.nn.Module,
+            self,
+            embedder: Embedder,
+            criterion: torch.nn.Module,
     ):
         super().__init__()
         self.embedder = embedder
         self.criterion = criterion
-        
+
     def __init_subclass__(cls) -> None:
         DataType2TrainerMap[cls.data_type] = cls
 
 
 class EmbedderForPairInBatchNegTrain(EmbedderForTrain):
     data_type: ClassVar[DataType] = DataType.pair_inbatch_neg
-    
+
     def __init__(
-        self,
-        embedder: Embedder,
-        temperature: float = 0.05,
-        loss_type: InBatchNegLossType | str = InBatchNegLossType.softmax,
+            self,
+            embedder: Embedder,
+            temperature: float = 0.05,
+            loss_type: InBatchNegLossType | str = InBatchNegLossType.softmax,
     ):
         self.loss_type = InBatchNegLossType(loss_type)
         if self.loss_type == InBatchNegLossType.sigmoid:
-                criterion = PairInBatchNegSigmoidContrastLoss(temperature)
+            criterion = PairInBatchNegSigmoidContrastLoss(temperature)
         if self.loss_type == InBatchNegLossType.softmax:
-                criterion = PairInBatchNegSoftmaxContrastLoss(temperature)
+            criterion = PairInBatchNegSoftmaxContrastLoss(temperature)
         if self.loss_type == InBatchNegLossType.cosent:
-                criterion = PairInBatchNegCoSentLoss(temperature)
+            criterion = PairInBatchNegCoSentLoss(temperature)
         super().__init__(embedder, criterion)
 
     def forward(self, text_ids: torch.Tensor, text_pos_ids: torch.Tensor) -> dict[str, torch.Tensor]:
@@ -234,13 +240,13 @@ class EmbedderForPairInBatchNegTrain(EmbedderForTrain):
 
 class EmbedderForTripletInBatchNegTrain(EmbedderForTrain):
     data_type: ClassVar[DataType] = DataType.triplet_inbatch_neg
-    
+
     def __init__(
-        self,
-        embedder: Embedder,
-        temperature: float = 0.05,
-        loss_type: InBatchNegLossType | str = InBatchNegLossType.softmax,
-        add_swap_loss: bool = False,
+            self,
+            embedder: Embedder,
+            temperature: float = 0.05,
+            loss_type: InBatchNegLossType | str = InBatchNegLossType.softmax,
+            add_swap_loss: bool = False,
     ):
         self.loss_type = InBatchNegLossType(loss_type)
         if self.loss_type == InBatchNegLossType.sigmoid:
@@ -252,10 +258,10 @@ class EmbedderForTripletInBatchNegTrain(EmbedderForTrain):
         super().__init__(embedder, criterion)
 
     def forward(
-        self,
-        text_ids: torch.Tensor,
-        text_pos_ids: torch.Tensor,
-        text_neg_ids: torch.Tensor,
+            self,
+            text_ids: torch.Tensor,
+            text_pos_ids: torch.Tensor,
+            text_neg_ids: torch.Tensor,
     ) -> dict[str, torch.Tensor]:
         text_embeddings = self.embedder(text_ids)
         text_pos_embeddings = self.embedder(text_pos_ids)
@@ -266,39 +272,35 @@ class EmbedderForTripletInBatchNegTrain(EmbedderForTrain):
 
 class EmbedderForScoredPairTrain(EmbedderForTrain):
     data_type: ClassVar[DataType] = DataType.scored_pair
-    
-    def __init__(
-        self,
-        embedder: Embedder,
-        temperature: float = 0.05,
-        loss_type = InBatchNegLossType | str = InBatchNegLossType.cosent
-    ):
+
+    def __init__(self, embedder: Embedder, temperature: float = 0.05, loss_type: InBatchNegLossType | str=InBatchNegLossType.cosent):
         self.loss_type = loss_type
         super().__init__(embedder, CoSentLoss(temperature))
 
-    def forward(
+
+def forward(
         self,
         text_ids: torch.Tensor,
         text_pair_ids: torch.Tensor,
         labels: torch.Tensor,
-    ) -> dict[str, torch.Tensor]:
-        text_embeddings = self.embedder(text_ids)
-        text_pos_embeddings = self.embedder(text_pair_ids)
-        predict_labels = torch.cosine_similarity(text_embeddings, text_pos_embeddings, dim=-1)
-        loss = self.criterion(predict_labels, labels)
-        return {'loss': loss, 'predict_labels': predict_labels,"labels":labels}
+) -> dict[str, torch.Tensor]:
+    text_embeddings = self.embedder(text_ids)
+    text_pos_embeddings = self.embedder(text_pair_ids)
+    predict_labels = torch.cosine_similarity(text_embeddings, text_pos_embeddings, dim=-1)
+    loss = self.criterion(predict_labels, labels)
+    return {'loss': loss, 'predict_labels': predict_labels, "labels": labels}
 
 
 class Uniem:
     PROGRESS_BAR_THRESHOLD = 1000
 
     def __init__(
-        self,
-        embedder: UniemEmbedder,
-        tokenizer: Tokenizer,
-        normalize: bool = True,
-        max_length: int | None = None,
-        device: str | None = None,
+            self,
+            embedder: UniemEmbedder,
+            tokenizer: Tokenizer,
+            normalize: bool = True,
+            max_length: int | None = None,
+            device: str | None = None,
     ):
         super().__init__()
         self.embedder = embedder.eval()
@@ -308,28 +310,28 @@ class Uniem:
         self.tokenizer = tokenizer
         self.normalize = normalize
         self.max_length = (
-            max_length or self.embedder.encoder.config.max_length or self.embedder.encoder.config.max_position_embeddings
+                max_length or self.embedder.encoder.config.max_length or self.embedder.encoder.config.max_position_embeddings
         )
 
     def __call__(self, sentences: list[str], batch_size: int = 32):
         return self.encode(sentences, batch_size)
 
     def encode(
-        self,
-        sentences: list[str],
-        batch_size: int = 32,
-        progress_bar: Literal['auto'] | bool = 'auto',
+            self,
+            sentences: list[str],
+            batch_size: int = 32,
+            progress_bar: Literal['auto'] | bool = 'auto',
     ):
         embeddings: list[np.ndarray] = []
         if progress_bar == 'auto':
             progress_bar = len(sentences) > self.PROGRESS_BAR_THRESHOLD
 
         for batch in tqdm.tqdm(
-            generate_batch(sentences, batch_size),
-            disable=not progress_bar,
-            total=len(sentences) // batch_size,
-            unit='batch',
-            desc='Encoding',
+                generate_batch(sentences, batch_size),
+                disable=not progress_bar,
+                total=len(sentences) // batch_size,
+                unit='batch',
+                desc='Encoding',
         ):
             encodes = self.tokenizer(
                 batch,
