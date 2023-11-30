@@ -7,6 +7,8 @@
 **faster uniem**
 
 本项目是在[uniem](https://github.com/wangyuxinwhy/uniem)基础上的二次开发，优化了以下工作。极大的提升了训练和推理效率。
+完全兼容sentence-transformer模型， 可以简单替换任意现有预训练基模型，比如M3E、bge等
+
 # 改进项
 - [x] deepspeed训练加速
 - [x] transformers pipeline加速推理
