@@ -13,6 +13,7 @@
 - [ ] lora 微调
 - [x] 增加训练脚本和examples
 - [ ] 实现双塔共享与不共享的自动配置
+- [x] 使用deepspeed重写finetune和trainer接口
 
 uniem 项目的目标是创建中文最好的通用文本嵌入模型。
 
