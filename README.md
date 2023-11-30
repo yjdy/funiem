@@ -33,11 +33,13 @@ uniem 项目的目标是创建中文最好的通用文本嵌入模型。
 | funiem | 29min       | 20G |
 
 ### 推理效率对比
-推理速度相较于sentence-transformers原生推理**提高了7倍**
+transformers pipeline 推理速度相较于sentence-transformers原生推理**提高了7倍**
+transformers pipeline + deepspeed 推理提升 **18倍**
 | 框架                    | 推理时间  |
 |-----------------------|-------|
 | sentence-transformers | 22min |
-| funiem                | 3min  |
+| funiem with transformers pipeline                | 3min  |
+|funiem with transformers pipeline + deepspeed|1min12s|
 
 ## 🔧 使用 M3E
 
