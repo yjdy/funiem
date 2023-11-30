@@ -14,16 +14,26 @@ from torch.utils.data import DataLoader
 from uniem.model import create_uniem_embedder, PoolingStrategy
 from uniem.utils import create_finetune_datasets, load_all_datasets_json
 from uniem.data_structures import RecordType
-
+import deepspeed
 
 def inference_single_gpu_scored_pair(model_name_or_path: str | None,
                                      data_path: str | None, model_class=None, pooling_strategy=None | PoolingStrategy,
-                                     metric=None, query_instruction='', record_type=RecordType.SCORED_PAIR,
+                                     metric=None, query_instruction='', record_type=RecordType.SCORED_PAIR, deepspeed=False,
                                      max_length: int = 512, batch_size: int = 32, device: int = 0) -> None:
     tokenizers = AutoTokenizer.from_pretrained(model_name_or_path)
     model = create_uniem_embedder(model_name_or_path=model_name_or_path,
                                   model_class=model_class,
                                   pooling_strategy=pooling_strategy)
+    # init deepspeed inference engine
+    if deepspeed:
+        model = deepspeed.init_inference(
+            model=model,  # Transformers models
+            mp_size=1,  # Number of GPU
+            dtype=torch.half,  # dtype of the weights (fp16)
+            # injection_policy={"BertLayer" : HFBertLayerPolicy}, # replace BertLayer with DS HFBertLayerPolicy
+            replace_method="auto",  # Lets DS autmatically identify the layer to replace
+            replace_with_kernel_inject=True,  # replace the model with the kernel injector
+        )
 
     # create acclerated pipeline
     ds_clf = pipeline("embedding_search", model=model, tokenizer=tokenizers,
