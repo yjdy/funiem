@@ -1,11 +1,13 @@
-# uniem
+# funiem
 [![Release](https://img.shields.io/pypi/v/uniem)](https://pypi.org/project/uniem/)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/uniem)
 [![ci](https://github.com/wangyuxinwhy/uniem/actions/workflows/ci.yml/badge.svg)](https://github.com/wangyuxinwhy/uniem/actions/workflows/ci.yml)
 [![cd](https://github.com/wangyuxinwhy/uniem/actions/workflows/cd.yml/badge.svg)](https://github.com/wangyuxinwhy/uniem/actions/workflows/cd.yml)
 
+**faster uniem**
+
 本项目是在[uniem](https://github.com/wangyuxinwhy/uniem)基础上的二次开发，优化了以下工作。极大的提升了训练和推理效率。
-# TO DO
+# 改进项
 - [x] deepspeed训练加速
 - [x] transformers pipeline加速推理
 - [x] 根据数据格式自动选择训练策略
