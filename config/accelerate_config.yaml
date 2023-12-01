@@ -1,7 +1,7 @@
 compute_environment: LOCAL_MACHINE
 debug: true
 deepspeed_config:
-  deepspeed_config_file: /config/zero_stage2_config.json
+  deepspeed_config_file: ./config/zero_stage2_config.json
   zero3_init_flag: false
 distributed_type: DEEPSPEED
 downcast_bf16: 'no'
