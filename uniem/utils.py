@@ -112,11 +112,13 @@ def load_hf_pretrained_model(
 
 def create_adamw_optimizer(
     model: torch.nn.Module,
-    lr: float,
-    weight_decay: float = 1e-3,
+    lr: float = 0.001,
+    weight_decay: float = 1e-2,
+    betas=(0.9, 0.999),
     no_decay_keywords: Sequence[str] = ('bias', 'LayerNorm', 'layernorm'),
     dummy=False
 ):
+    # default paramaters is same as admaw
     parameters = list(model.named_parameters())
     optimizer_grouped_parameters = [
         {
@@ -130,13 +132,12 @@ def create_adamw_optimizer(
             'lr': lr
         },
     ]
-    if not dummy: 
-        optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=lr)
+    if not dummy:
+        optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=lr,betas=betas,weight_decay=weight_decay)
     else:
         # 使用deepspeed时需要使用dummy
-        optimizer = DummyOptim(optimizer_grouped_parameters,lr=lr,weight_decay=weight_decay)
+        optimizer = DummyOptim(optimizer_grouped_parameters,lr=lr,weight_decay=weight_decay,betas=betas)
     return optimizer
-
 
 def create_attention_mask_from_input_ids(input_ids: torch.Tensor, pad_token_id: int) -> torch.Tensor:
     return input_ids != pad_token_id
